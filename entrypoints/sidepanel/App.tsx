@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { EMPTY_BROWSER_STATE, type BrowserState, type GroupRecord, type TabRecord, type WindowRecord, UI_PORT_NAME } from "../../src/lib/browser-state";
 import { formatUrl } from "../../src/lib/format-url";
+import { BrandMark } from "./BrandMark";
 
 export function App() {
   const [browserState, setBrowserState] = useState<BrowserState>(EMPTY_BROWSER_STATE);
@@ -80,9 +81,12 @@ export function App() {
   return (
     <main className="app-shell">
       <header className="app-header">
-        <div>
-          <p className="eyebrow">Tab Group Manager</p>
-          <h1>Browser Overview</h1>
+        <div className="brand-block">
+          <BrandMark />
+          <div>
+            <p className="eyebrow">Tab Group Manager</p>
+            <h1>Browser Overview</h1>
+          </div>
         </div>
         <button className="refresh-button" type="button" onClick={handleRefresh} disabled={refreshing}>
           {refreshing ? "Refreshing..." : "Refresh"}
@@ -155,6 +159,46 @@ function WindowCard({ index, windowRecord }: { index: number; windowRecord: Wind
 }
 
 function GroupCard({ groupRecord }: { groupRecord: GroupRecord }) {
+  const [pendingAction, setPendingAction] = useState<"suspend" | "restore" | null>(null);
+  const suspendableCount = groupRecord.tabs.filter((tabRecord) => !tabRecord.suspended).length;
+  const restorableCount = groupRecord.tabs.filter((tabRecord) => tabRecord.suspended).length;
+
+  useEffect(() => {
+    if (pendingAction === "suspend" && suspendableCount === 0) {
+      setPendingAction(null);
+    }
+
+    if (pendingAction === "restore" && restorableCount === 0) {
+      setPendingAction(null);
+    }
+  }, [pendingAction, restorableCount, suspendableCount]);
+
+  async function handleSuspendGroup() {
+    setPendingAction("suspend");
+
+    try {
+      await browser.runtime.sendMessage({
+        type: "SUSPEND_GROUP",
+        groupId: groupRecord.id
+      });
+    } finally {
+      setPendingAction((current) => (current === "suspend" ? null : current));
+    }
+  }
+
+  async function handleRestoreGroup() {
+    setPendingAction("restore");
+
+    try {
+      await browser.runtime.sendMessage({
+        type: "RESTORE_GROUP",
+        groupId: groupRecord.id
+      });
+    } finally {
+      setPendingAction((current) => (current === "restore" ? null : current));
+    }
+  }
+
   return (
     <section className="group-card">
       <header className="group-header">
@@ -166,6 +210,26 @@ function GroupCard({ groupRecord }: { groupRecord: GroupRecord }) {
               {groupRecord.tabCount} tabs{groupRecord.collapsed ? " • collapsed" : ""}
             </p>
           </div>
+        </div>
+        <div className="group-actions">
+          <button
+            className="group-action"
+            type="button"
+            onClick={handleRestoreGroup}
+            disabled={pendingAction !== null || restorableCount === 0}
+            data-pending={pendingAction === "restore" ? "true" : "false"}
+          >
+            {pendingAction === "restore" ? "Restoring..." : "Restore Group"}
+          </button>
+          <button
+            className="group-action"
+            type="button"
+            onClick={handleSuspendGroup}
+            disabled={pendingAction !== null || suspendableCount === 0}
+            data-pending={pendingAction === "suspend" ? "true" : "false"}
+          >
+            {pendingAction === "suspend" ? "Suspending..." : "Suspend Group"}
+          </button>
         </div>
       </header>
 
@@ -214,7 +278,7 @@ function TabRow({ tabRecord }: { tabRecord: TabRecord }) {
             </span>
           ))}
         </div>
-        <button className="tab-action" type="button" onClick={handleAction} disabled={pending}>
+        <button className="tab-action" type="button" onClick={handleAction} disabled={pending} data-pending={pending ? "true" : "false"}>
           {pending ? (tabRecord.suspended ? "Restoring..." : "Suspending...") : tabRecord.suspended ? "Restore" : "Suspend"}
         </button>
       </div>

@@ -73,6 +73,14 @@ export type BrowserStateMessage =
       tabId: number;
     }
   | {
+      type: "SUSPEND_GROUP";
+      groupId: number;
+    }
+  | {
+      type: "RESTORE_GROUP";
+      groupId: number;
+    }
+  | {
       type: "RESTORE_TAB";
       tabId: number;
     };

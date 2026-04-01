@@ -62,6 +62,20 @@ export default defineBackground({
         return true;
       }
 
+      if (message?.type === "SUSPEND_GROUP") {
+        suspendGroup(message.groupId)
+          .then((result) => sendResponse({ ok: result }))
+          .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+      }
+
+      if (message?.type === "RESTORE_GROUP") {
+        restoreGroup(message.groupId)
+          .then((result) => sendResponse({ ok: result }))
+          .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+      }
+
       if (message?.type === "RESTORE_TAB") {
         restoreTab(message.tabId)
           .then((result) => sendResponse({ ok: result }))
@@ -155,7 +169,7 @@ export default defineBackground({
       });
     }
 
-    async function suspendTab(tabId: number) {
+    async function suspendTab(tabId: number, options?: { refreshAfter?: boolean }) {
       const tab = await browser.tabs.get(tabId);
 
       if (!canSuspendTab(tab)) {
@@ -185,11 +199,29 @@ export default defineBackground({
 
       const suspendedUrl = browser.runtime.getURL(`/${SUSPENDED_ROUTE}?${params.toString()}`);
       await browser.tabs.update(tabId, { url: suspendedUrl });
+      if (options?.refreshAfter !== false) {
+        await refreshBrowserState();
+      }
+      return true;
+    }
+
+    async function suspendGroup(groupId: number) {
+      const tabsInGroup = await browser.tabs.query({ groupId });
+      const suspendableTabs = tabsInGroup.filter(canSuspendTab);
+
+      if (suspendableTabs.length === 0) {
+        return false;
+      }
+
+      for (const tab of suspendableTabs) {
+        await suspendTab(tab.id!, { refreshAfter: false });
+      }
+
       await refreshBrowserState();
       return true;
     }
 
-    async function restoreTab(tabId: number) {
+    async function restoreTab(tabId: number, options?: { refreshAfter?: boolean }) {
       const tab = await browser.tabs.get(tabId);
       const fallbackUrl = getOriginalUrlFromSuspendedPage(tab.url);
       const storedRecord = await getSuspendedTabRecord(tabId);
@@ -201,6 +233,24 @@ export default defineBackground({
 
       await browser.tabs.update(tabId, { url: originalUrl });
       await deleteSuspendedTabRecord(tabId);
+      if (options?.refreshAfter !== false) {
+        await refreshBrowserState();
+      }
+      return true;
+    }
+
+    async function restoreGroup(groupId: number) {
+      const tabsInGroup = await browser.tabs.query({ groupId });
+      const suspendedTabs = tabsInGroup.filter((tab) => isSuspendedPage(tab.url));
+
+      if (suspendedTabs.length === 0) {
+        return false;
+      }
+
+      for (const tab of suspendedTabs) {
+        await restoreTab(tab.id!, { refreshAfter: false });
+      }
+
       await refreshBrowserState();
       return true;
     }
