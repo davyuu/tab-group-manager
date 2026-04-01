@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tab Group Manager</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Tab Group Manager</p>
+        <h1>Browser Overview</h1>
+      </div>
+      <button id="refreshButton" class="refresh-button" type="button">Refresh</button>
+    </header>
+
+    <section class="summary-grid" id="summaryGrid">
+      <article class="summary-card">
+        <span class="summary-label">Windows</span>
+        <strong id="windowCount">0</strong>
+      </article>
+      <article class="summary-card">
+        <span class="summary-label">Groups</span>
+        <strong id="groupCount">0</strong>
+      </article>
+      <article class="summary-card">
+        <span class="summary-label">Tabs</span>
+        <strong id="tabCount">0</strong>
+      </article>
+    </section>
+
+    <section class="status-row">
+      <span id="statusText">Loading browser state…</span>
+    </section>
+
+    <section id="windowList" class="window-list" aria-live="polite"></section>
+  </main>
+
+  <template id="windowTemplate">
+    <article class="window-card">
+      <header class="window-header">
+        <div>
+          <h2 class="window-title"></h2>
+          <p class="window-meta"></p>
+        </div>
+        <span class="window-badge"></span>
+      </header>
+      <div class="group-list"></div>
+      <div class="ungrouped-block">
+        <h3>Ungrouped Tabs</h3>
+        <div class="tab-list"></div>
+      </div>
+    </article>
+  </template>
+
+  <template id="groupTemplate">
+    <section class="group-card">
+      <header class="group-header">
+        <div class="group-title-row">
+          <span class="group-color"></span>
+          <div>
+            <h3 class="group-title"></h3>
+            <p class="group-meta"></p>
+          </div>
+        </div>
+      </header>
+      <div class="tab-list"></div>
+    </section>
+  </template>
+
+  <template id="tabTemplate">
+    <article class="tab-row">
+      <img class="tab-favicon" alt="">
+      <div class="tab-copy">
+        <p class="tab-title"></p>
+        <p class="tab-url"></p>
+      </div>
+      <div class="tab-flags"></div>
+    </article>
+  </template>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
