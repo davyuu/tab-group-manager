@@ -2,8 +2,13 @@
 
 ## Workspace Status
 
-- This repository was empty at planning time except for the docs added in this turn.
-- No implementation code has been written yet.
+- The repository started empty, then a plain MV3 prototype was created for step 1.
+- Step 2 single-tab suspension work was started after that, but it is currently stashed and not active in the working tree.
+- Step 1 has now been migrated into a WXT + TypeScript + React structure.
+
+Current stash of note:
+
+- `step-2-suspend-prototype`
 
 ## User Goal
 
@@ -82,6 +87,28 @@ Best path:
 
 That new state layer is the missing piece in both upstreams.
 
+## Framework Direction
+
+The chosen long-term stack is:
+
+- WXT
+- TypeScript
+- React for the side panel UI
+
+The old plain `manifest.json`, `background.js`, `sidepanel.html`, `sidepanel.js`, and `sidepanel.css` files were prototype code and have now been replaced by the WXT structure.
+
+Current primary structure:
+
+- `wxt.config.ts`
+- `entrypoints/background/index.ts`
+- `entrypoints/sidepanel/index.html`
+- `entrypoints/sidepanel/main.tsx`
+- `entrypoints/sidepanel/App.tsx`
+- `entrypoints/sidepanel/style.css`
+- `src/lib/browser-state.ts`
+- `src/lib/normalize-browser-state.ts`
+- `src/lib/format-url.ts`
+
 ## Agreed Milestones
 
 ### Milestone 1
@@ -118,6 +145,13 @@ That new state layer is the missing piece in both upstreams.
 4. Port single-tab suspension mechanics from the suspender repo.
 5. Add group suspension orchestration.
 6. Add restore, focus, policy, auto-suspend, whitelist, metadata, and tests.
+
+## Current Status
+
+- Step 1 exists and is implemented in WXT.
+- The WXT build passes with `pnpm build`.
+- TypeScript checking passes with `pnpm exec tsc --noEmit`.
+- Step 2 is intentionally paused and stashed pending a clean WXT-native implementation.
 
 ## Docs Added In This Turn
 

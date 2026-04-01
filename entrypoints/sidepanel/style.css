@@ -40,6 +40,10 @@ body {
   color: var(--text);
 }
 
+#root {
+  min-height: 100vh;
+}
+
 .app-shell {
   padding: 16px;
   display: flex;
@@ -78,6 +82,11 @@ body {
   font: inherit;
   cursor: pointer;
   box-shadow: var(--shadow);
+}
+
+.refresh-button:disabled {
+  cursor: wait;
+  opacity: 0.8;
 }
 
 .summary-grid {
@@ -146,9 +155,22 @@ body {
   gap: 12px;
 }
 
+.window-header {
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.group-header {
+  padding-bottom: 6px;
+}
+
 .window-title,
 .group-title {
   margin: 0;
+}
+
+.group-title {
+  font-size: 18px;
 }
 
 .window-meta,
@@ -156,6 +178,10 @@ body {
 .tab-url {
   margin: 4px 0 0;
   color: var(--muted);
+}
+
+.group-meta {
+  font-size: 13px;
 }
 
 .window-badge {
@@ -221,7 +247,7 @@ body {
 
 .tab-row {
   align-items: flex-start;
-  padding: 10px 0;
+  padding: 10px 2px;
   border-top: 1px solid var(--border);
 }
 
@@ -289,28 +315,6 @@ body {
   margin: 0;
   font-size: 14px;
   color: var(--text);
-}
-
-.window-header {
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.group-header {
-  padding-bottom: 6px;
-}
-
-.group-title {
-  font-size: 18px;
-}
-
-.group-meta {
-  font-size: 13px;
-}
-
-.group-card .tab-row {
-  padding-left: 2px;
-  padding-right: 2px;
 }
 
 .empty-state {
