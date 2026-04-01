@@ -3,6 +3,17 @@ export type BrowserState = {
   windows: WindowRecord[];
 };
 
+export type SuspendedTabRecord = {
+  tabId: number;
+  originalUrl: string;
+  originalTitle: string;
+  originalFavIconUrl: string;
+  windowId: number;
+  groupId: number;
+  index: number;
+  capturedAt: number;
+};
+
 export type WindowRecord = {
   id: number;
   focused: boolean;
@@ -37,6 +48,7 @@ export type TabRecord = {
   pinned: boolean;
   audible: boolean;
   discarded: boolean;
+  suspended: boolean;
   status: string;
 };
 
@@ -55,6 +67,16 @@ export type BrowserStateMessage =
     }
   | {
       type: "REFRESH_BROWSER_STATE";
+    }
+  | {
+      type: "SUSPEND_TAB";
+      tabId: number;
+    }
+  | {
+      type: "RESTORE_TAB";
+      tabId: number;
     };
 
 export const UI_PORT_NAME = "tab-group-manager-ui";
+export const SUSPENDED_ROUTE = "suspended.html";
+export const SUSPENDED_STORAGE_KEY = "suspendedTabsById";

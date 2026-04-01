@@ -1,4 +1,12 @@
-import { EMPTY_BROWSER_STATE, type BrowserState, type BrowserStateMessage, UI_PORT_NAME } from "../../src/lib/browser-state";
+import {
+  EMPTY_BROWSER_STATE,
+  SUSPENDED_ROUTE,
+  SUSPENDED_STORAGE_KEY,
+  type BrowserState,
+  type BrowserStateMessage,
+  type SuspendedTabRecord,
+  UI_PORT_NAME
+} from "../../src/lib/browser-state";
 import { buildBrowserState } from "../../src/lib/normalize-browser-state";
 
 export default defineBackground({
@@ -43,6 +51,20 @@ export default defineBackground({
       if (message?.type === "REFRESH_BROWSER_STATE") {
         refreshBrowserState()
           .then(() => sendResponse({ ok: true }))
+          .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+      }
+
+      if (message?.type === "SUSPEND_TAB") {
+        suspendTab(message.tabId)
+          .then((result) => sendResponse({ ok: result }))
+          .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+      }
+
+      if (message?.type === "RESTORE_TAB") {
+        restoreTab(message.tabId)
+          .then((result) => sendResponse({ ok: result }))
           .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
         return true;
       }
@@ -110,7 +132,8 @@ export default defineBackground({
           browser.tabGroups.query({})
         ]);
 
-        browserStateCache = buildBrowserState(windows, groups);
+        const suspendedTabStore = await getSuspendedTabStore();
+        browserStateCache = buildBrowserState(windows, groups, suspendedTabStore);
         broadcastBrowserState();
       } catch (error) {
         console.error("Failed to refresh browser state:", error);
@@ -130,6 +153,119 @@ export default defineBackground({
           console.error("Failed to post browser state update:", error);
         }
       });
+    }
+
+    async function suspendTab(tabId: number) {
+      const tab = await browser.tabs.get(tabId);
+
+      if (!canSuspendTab(tab)) {
+        return false;
+      }
+
+      const record: SuspendedTabRecord = {
+        tabId: tab.id!,
+        originalUrl: tab.url || "",
+        originalTitle: tab.title || "Suspended Tab",
+        originalFavIconUrl: tab.favIconUrl || "",
+        windowId: tab.windowId,
+        groupId: tab.groupId ?? -1,
+        index: tab.index,
+        capturedAt: Date.now()
+      };
+
+      await saveSuspendedTabRecord(record);
+
+      const params = new URLSearchParams({
+        tabId: String(record.tabId),
+        url: record.originalUrl,
+        title: record.originalTitle,
+        favicon: record.originalFavIconUrl,
+        capturedAt: String(record.capturedAt)
+      });
+
+      const suspendedUrl = browser.runtime.getURL(`/${SUSPENDED_ROUTE}?${params.toString()}`);
+      await browser.tabs.update(tabId, { url: suspendedUrl });
+      await refreshBrowserState();
+      return true;
+    }
+
+    async function restoreTab(tabId: number) {
+      const tab = await browser.tabs.get(tabId);
+      const fallbackUrl = getOriginalUrlFromSuspendedPage(tab.url);
+      const storedRecord = await getSuspendedTabRecord(tabId);
+      const originalUrl = storedRecord?.originalUrl || fallbackUrl;
+
+      if (!originalUrl) {
+        return false;
+      }
+
+      await browser.tabs.update(tabId, { url: originalUrl });
+      await deleteSuspendedTabRecord(tabId);
+      await refreshBrowserState();
+      return true;
+    }
+
+    function canSuspendTab(tab: chrome.tabs.Tab) {
+      if (!tab.id || !tab.url) {
+        return false;
+      }
+
+      if (isInternalPage(tab.url)) {
+        return false;
+      }
+
+      if (isSuspendedPage(tab.url)) {
+        return false;
+      }
+
+      return true;
+    }
+
+    function isInternalPage(url: string) {
+      return (
+        url.startsWith("chrome://") ||
+        url.startsWith("chrome-extension://") ||
+        url.startsWith("edge://") ||
+        url.startsWith("about:")
+      );
+    }
+
+    function isSuspendedPage(url?: string) {
+      if (!url) {
+        return false;
+      }
+
+      return url.startsWith(browser.runtime.getURL(`/${SUSPENDED_ROUTE}`));
+    }
+
+    function getOriginalUrlFromSuspendedPage(url?: string) {
+      try {
+        return url ? new URL(url).searchParams.get("url") || "" : "";
+      } catch (_error) {
+        return "";
+      }
+    }
+
+    async function getSuspendedTabStore() {
+      const result = await browser.storage.local.get(SUSPENDED_STORAGE_KEY);
+      return (result[SUSPENDED_STORAGE_KEY] || {}) as Record<string, SuspendedTabRecord>;
+    }
+
+    async function getSuspendedTabRecord(tabId: number) {
+      const store = await getSuspendedTabStore();
+      return store[String(tabId)] || null;
+    }
+
+    async function saveSuspendedTabRecord(record: SuspendedTabRecord) {
+      const store = await getSuspendedTabStore();
+      store[String(record.tabId)] = record;
+      await browser.storage.local.set({ [SUSPENDED_STORAGE_KEY]: store });
+    }
+
+    async function deleteSuspendedTabRecord(tabId: number) {
+      const store = await getSuspendedTabStore();
+      delete store[String(tabId)];
+      await browser.storage.local.set({ [SUSPENDED_STORAGE_KEY]: store });
     }
   }
 });

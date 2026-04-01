@@ -180,6 +180,20 @@ function GroupCard({ groupRecord }: { groupRecord: GroupRecord }) {
 
 function TabRow({ tabRecord }: { tabRecord: TabRecord }) {
   const flags = buildFlags(tabRecord);
+  const [pending, setPending] = useState(false);
+
+  async function handleAction() {
+    setPending(true);
+
+    try {
+      await browser.runtime.sendMessage({
+        type: tabRecord.suspended ? "RESTORE_TAB" : "SUSPEND_TAB",
+        tabId: tabRecord.id
+      });
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <article className="tab-row">
@@ -192,12 +206,17 @@ function TabRow({ tabRecord }: { tabRecord: TabRecord }) {
         <p className="tab-title">{tabRecord.title}</p>
         <p className="tab-url">{formatUrl(tabRecord.url)}</p>
       </div>
-      <div className="tab-flags">
-        {flags.map((flag) => (
-          <span className="flag" key={flag}>
-            {flag}
-          </span>
-        ))}
+      <div className="tab-controls">
+        <div className="tab-flags">
+          {flags.map((flag) => (
+            <span className="flag" key={flag}>
+              {flag}
+            </span>
+          ))}
+        </div>
+        <button className="tab-action" type="button" onClick={handleAction} disabled={pending}>
+          {pending ? (tabRecord.suspended ? "Restoring..." : "Suspending...") : tabRecord.suspended ? "Restore" : "Suspend"}
+        </button>
       </div>
     </article>
   );
@@ -220,6 +239,10 @@ function buildFlags(tabRecord: TabRecord) {
 
   if (tabRecord.discarded) {
     flags.push("Discarded");
+  }
+
+  if (tabRecord.suspended) {
+    flags.push("Suspended");
   }
 
   return flags;
