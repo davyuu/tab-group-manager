@@ -19,6 +19,7 @@ root.innerHTML = `
         ? `Suspended ${new Date(capturedAt).toLocaleString()}`
         : "Suspended recently"
     }</p>
+    <p class="restore-hint">Refresh this tab to restore the original page, or use the button below.</p>
     <button id="restoreButton" class="restore-button" type="button">Load Original Page</button>
   </main>
 `;
@@ -30,6 +31,10 @@ document.addEventListener("keydown", (event) => {
     void handleRestore();
   }
 });
+
+if (wasLoadedByManualRefresh()) {
+  void handleRestore();
+}
 
 async function handleRestore() {
   const currentTab = await browser.tabs.getCurrent();
@@ -56,6 +61,16 @@ async function handleRestore() {
     }
     console.error(error);
   }
+}
+
+function wasLoadedByManualRefresh() {
+  const navigationEntry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+
+  if (navigationEntry) {
+    return navigationEntry.type === "reload";
+  }
+
+  return performance.navigation.type === performance.navigation.TYPE_RELOAD;
 }
 
 function escapeHtml(value: string) {

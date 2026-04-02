@@ -54,10 +54,15 @@ h1 {
 }
 
 .page-url,
-.captured-at {
+.captured-at,
+.restore-hint {
   margin: 14px 0 0;
   color: var(--muted);
   word-break: break-word;
+}
+
+.restore-hint {
+  font-size: 15px;
 }
 
 .restore-button {
