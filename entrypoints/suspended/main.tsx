@@ -11,6 +11,18 @@ function SuspendedApp() {
   const [restoring, setRestoring] = useState(false);
   const restoringRef = useRef(false);
 
+  const sendRestoreMessage = useCallback(async () => {
+    const currentTab = await browser.tabs.getCurrent();
+    if (!currentTab?.id) {
+      return;
+    }
+
+    await browser.runtime.sendMessage({
+      type: "RESTORE_TAB",
+      tabId: currentTab.id
+    });
+  }, []);
+
   useEffect(() => {
     document.title = title;
   }, [title]);
@@ -20,33 +32,29 @@ function SuspendedApp() {
       return;
     }
 
-    const currentTab = await browser.tabs.getCurrent();
-    if (!currentTab?.id) {
-      return;
-    }
-
     restoringRef.current = true;
     setRestoring(true);
 
     try {
-      await browser.runtime.sendMessage({
-        type: "RESTORE_TAB",
-        tabId: currentTab.id
-      });
+      await sendRestoreMessage();
     } catch (error) {
       restoringRef.current = false;
       setRestoring(false);
       console.error(error);
     }
-  }, []);
+  }, [sendRestoreMessage]);
 
   useEffect(() => {
     if (!wasLoadedByManualRefresh()) {
       return;
     }
 
-    void handleRestore();
-  }, [handleRestore]);
+    restoringRef.current = true;
+    void sendRestoreMessage().catch((error) => {
+      restoringRef.current = false;
+      console.error(error);
+    });
+  }, [sendRestoreMessage]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -68,31 +76,33 @@ function SuspendedApp() {
       : "Suspended recently";
 
   return (
-    <main
-      className="suspended-shell"
+    <div
+      className="suspended-page"
       role="button"
       tabIndex={0}
       aria-label="Restore original page"
       onClick={() => void handleRestore()}
     >
-      <p className="eyebrow">Tab Group Manager</p>
-      <h1>{title}</h1>
-      <p className="page-url">{originalUrl}</p>
-      <p className="captured-at">{capturedAtLabel}</p>
-      <p className="restore-hint">Refresh this tab or click anywhere on this page to load the original page.</p>
-      <button
-        id="restoreButton"
-        className="restore-button"
-        type="button"
-        disabled={restoring}
-        onClick={(event) => {
-          event.stopPropagation();
-          void handleRestore();
-        }}
-      >
-        {restoring ? "Restoring..." : "Load Original Page"}
-      </button>
-    </main>
+      <main className="suspended-shell">
+        <p className="eyebrow">Tab Group Manager</p>
+        <h1>{title}</h1>
+        <p className="page-url">{originalUrl}</p>
+        <p className="captured-at">{capturedAtLabel}</p>
+        <p className="restore-hint">Refresh this tab or click anywhere on this page to load the original page.</p>
+        <button
+          id="restoreButton"
+          className="restore-button"
+          type="button"
+          disabled={restoring}
+          onClick={(event) => {
+            event.stopPropagation();
+            void handleRestore();
+          }}
+        >
+          {restoring ? "Restoring..." : "Load Original Page"}
+        </button>
+      </main>
+    </div>
   );
 }
 

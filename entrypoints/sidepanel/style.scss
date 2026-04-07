@@ -66,6 +66,14 @@ body {
   }
 }
 
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .brand-block {
   display: flex;
   align-items: center;
@@ -90,6 +98,7 @@ body {
   color: var(--muted);
 }
 
+.header-action,
 .refresh-button {
   border: 1px solid var(--border);
   background: var(--surface-strong);
@@ -97,11 +106,17 @@ body {
   border-radius: 999px;
   padding: 10px 14px;
   font: inherit;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
   box-shadow: var(--shadow);
 
-  &:disabled {
+  &[data-pending="true"] {
     cursor: wait;
+  }
+
+  &:disabled {
+    cursor: default;
     opacity: 0.8;
   }
 }

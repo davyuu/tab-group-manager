@@ -1,8 +1,6 @@
 import {
   EMPTY_BROWSER_STATE,
-  SAVED_GROUPS_STORAGE_KEY,
   SUSPENDED_ROUTE,
-  SUSPENDED_STORAGE_KEY,
   type BrowserState,
   type BrowserStateMessage,
   type SavedGroupRecord,
@@ -10,6 +8,7 @@ import {
   UI_PORT_NAME
 } from "../../src/lib/browser-state";
 import { buildBrowserState } from "../../src/lib/normalize-browser-state";
+import { savedGroupsItem, suspendedTabsItem } from "../../src/lib/storage";
 
 export default defineBackground({
   type: "module",
@@ -78,8 +77,22 @@ export default defineBackground({
         return true;
       }
 
+      if (message?.type === "SUSPEND_ALL") {
+        suspendAllTabs()
+          .then((result) => sendResponse({ ok: result }))
+          .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+      }
+
       if (message?.type === "RESTORE_GROUP") {
         restoreGroup(message.groupId)
+          .then((result) => sendResponse({ ok: result }))
+          .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+      }
+
+      if (message?.type === "RESTORE_ALL") {
+        restoreAllTabs()
           .then((result) => sendResponse({ ok: result }))
           .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
         return true;
@@ -251,6 +264,22 @@ export default defineBackground({
       return true;
     }
 
+    async function suspendAllTabs() {
+      const allTabs = await browser.tabs.query({});
+      const suspendableTabs = allTabs.filter(canSuspendTab);
+
+      if (suspendableTabs.length === 0) {
+        return false;
+      }
+
+      for (const tab of suspendableTabs) {
+        await suspendTab(tab.id!, { refreshAfter: false });
+      }
+
+      await refreshBrowserState();
+      return true;
+    }
+
     async function restoreTab(tabId: number, options?: { refreshAfter?: boolean }) {
       const tab = await browser.tabs.get(tabId);
       const fallbackUrl = getOriginalUrlFromSuspendedPage(tab.url);
@@ -272,6 +301,22 @@ export default defineBackground({
     async function restoreGroup(groupId: number) {
       const tabsInGroup = await browser.tabs.query({ groupId });
       const suspendedTabs = tabsInGroup.filter((tab) => isSuspendedPage(tab.url));
+
+      if (suspendedTabs.length === 0) {
+        return false;
+      }
+
+      for (const tab of suspendedTabs) {
+        await restoreTab(tab.id!, { refreshAfter: false });
+      }
+
+      await refreshBrowserState();
+      return true;
+    }
+
+    async function restoreAllTabs() {
+      const allTabs = await browser.tabs.query({});
+      const suspendedTabs = allTabs.filter((tab) => isSuspendedPage(tab.url));
 
       if (suspendedTabs.length === 0) {
         return false;
@@ -324,7 +369,7 @@ export default defineBackground({
         ...savedGroups.filter((savedGroupRecord) => savedGroupRecord.title !== savedGroup.title)
       ];
 
-      await browser.storage.local.set({ [SAVED_GROUPS_STORAGE_KEY]: nextSavedGroups.slice(0, 50) });
+      await savedGroupsItem.setValue(nextSavedGroups.slice(0, 50));
 
       return nextSavedGroup;
     }
@@ -376,7 +421,7 @@ export default defineBackground({
         return false;
       }
 
-      await browser.storage.local.set({ [SAVED_GROUPS_STORAGE_KEY]: nextSavedGroups });
+      await savedGroupsItem.setValue(nextSavedGroups);
       return true;
     }
 
@@ -422,13 +467,11 @@ export default defineBackground({
     }
 
     async function getSuspendedTabStore() {
-      const result = await browser.storage.local.get(SUSPENDED_STORAGE_KEY);
-      return (result[SUSPENDED_STORAGE_KEY] || {}) as Record<string, SuspendedTabRecord>;
+      return suspendedTabsItem.getValue();
     }
 
     async function getSavedGroups() {
-      const result = await browser.storage.local.get(SAVED_GROUPS_STORAGE_KEY);
-      return (result[SAVED_GROUPS_STORAGE_KEY] || []) as SavedGroupRecord[];
+      return savedGroupsItem.getValue();
     }
 
     async function getSuspendedTabRecord(tabId: number) {
@@ -439,13 +482,13 @@ export default defineBackground({
     async function saveSuspendedTabRecord(record: SuspendedTabRecord) {
       const store = await getSuspendedTabStore();
       store[String(record.tabId)] = record;
-      await browser.storage.local.set({ [SUSPENDED_STORAGE_KEY]: store });
+      await suspendedTabsItem.setValue(store);
     }
 
     async function deleteSuspendedTabRecord(tabId: number) {
       const store = await getSuspendedTabStore();
       delete store[String(tabId)];
-      await browser.storage.local.set({ [SUSPENDED_STORAGE_KEY]: store });
+      await suspendedTabsItem.setValue(store);
     }
 
     function buildSavedGroupTab(tab: chrome.tabs.Tab, suspendedRecord?: SuspendedTabRecord) {

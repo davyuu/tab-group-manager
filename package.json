@@ -25,6 +25,7 @@
     "@types/react-dom": "^19.2.3",
     "@wxt-dev/module-react": "^1.2.2",
     "eslint": "^10.1.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^17.4.0",
     "sass": "^1.99.0",
     "sharp": "^0.34.5",

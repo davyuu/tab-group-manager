@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   EMPTY_BROWSER_STATE,
@@ -20,35 +20,67 @@ export function App() {
   const [statusText, setStatusText] = useState("Loading browser state...");
   const [refreshing, setRefreshing] = useState(false);
   const [activeView, setActiveView] = useState<"live" | "saved">("live");
+  const [pendingGlobalAction, setPendingGlobalAction] = useState<"suspend" | "restore" | null>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
+  const isMountedRef = useRef(false);
+
+  const refreshSavedGroups = useCallback(async () => {
+    try {
+      const nextSavedGroups = (await browser.runtime.sendMessage({ type: "GET_SAVED_GROUPS" })) as SavedGroupRecord[];
+      if (isMountedRef.current) {
+        setSavedGroups(nextSavedGroups);
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        setStatusText(`Saved groups failed to load: ${(error as Error).message}`);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    let reconnectTimeout: number | undefined;
+    let active = true;
     let port: chrome.runtime.Port | null = null;
-
-    const connect = () => {
-      port = browser.runtime.connect({ name: UI_PORT_NAME });
-
-      port.onMessage.addListener((message: unknown) => {
-        const nextMessage = message as { type?: string; payload?: BrowserState };
-
-        if (nextMessage?.type === "BROWSER_STATE_UPDATED" && nextMessage.payload) {
-          applyBrowserState(nextMessage.payload);
-        }
-      });
-
-      port.onDisconnect.addListener(() => {
-        setStatusText("Background connection lost. Reconnecting...");
-        reconnectTimeout = window.setTimeout(connect, 500);
-      });
-    };
+    isMountedRef.current = true;
 
     const applyBrowserState = (state: BrowserState) => {
+      if (!active) {
+        return;
+      }
+
       setBrowserState(state);
       if (state.updatedAt) {
         setStatusText(`Updated ${new Date(state.updatedAt).toLocaleTimeString()}`);
       } else {
         setStatusText("Waiting for browser state...");
       }
+    };
+
+    const connect = () => {
+      if (!active) {
+        return;
+      }
+
+      port = browser.runtime.connect({ name: UI_PORT_NAME });
+
+      const handleMessage = (message: unknown) => {
+        const nextMessage = message as { type?: string; payload?: BrowserState };
+
+        if (nextMessage?.type === "BROWSER_STATE_UPDATED" && nextMessage.payload) {
+          applyBrowserState(nextMessage.payload);
+        }
+      };
+
+      const handleDisconnect = () => {
+        if (!active) {
+          return;
+        }
+
+        setStatusText("Background connection lost. Reconnecting...");
+        reconnectTimeoutRef.current = window.setTimeout(connect, 500);
+      };
+
+      port.onMessage.addListener(handleMessage);
+      port.onDisconnect.addListener(handleDisconnect);
     };
 
     connect();
@@ -59,24 +91,47 @@ export function App() {
     void refreshSavedGroups();
 
     return () => {
-      if (reconnectTimeout) {
-        window.clearTimeout(reconnectTimeout);
+      active = false;
+      isMountedRef.current = false;
+
+      if (reconnectTimeoutRef.current != null) {
+        window.clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
+
       port?.disconnect();
     };
-  }, []);
+  }, [refreshSavedGroups]);
 
-  const summary = useMemo(() => {
-    return browserState.windows.reduce(
-      (accumulator, currentWindow) => {
-        accumulator.windows += 1;
-        accumulator.groups += currentWindow.groups.length;
-        accumulator.tabs += currentWindow.tabCount;
-        return accumulator;
-      },
-      { windows: 0, groups: 0, tabs: 0 }
-    );
-  }, [browserState.windows]);
+  const summary = browserState.windows.reduce(
+    (accumulator, currentWindow) => {
+      accumulator.windows += 1;
+      accumulator.groups += currentWindow.groups.length;
+      accumulator.tabs += currentWindow.tabCount;
+      return accumulator;
+    },
+    { windows: 0, groups: 0, tabs: 0 }
+  );
+  const suspendableTabCount = browserState.windows.reduce(
+    (count, windowRecord) =>
+      count +
+      windowRecord.ungroupedTabs.filter((tabRecord) => !tabRecord.suspended).length +
+      windowRecord.groups.reduce(
+        (groupCount, groupRecord) => groupCount + groupRecord.tabs.filter((tabRecord) => !tabRecord.suspended).length,
+        0
+      ),
+    0
+  );
+  const restorableTabCount = browserState.windows.reduce(
+    (count, windowRecord) =>
+      count +
+      windowRecord.ungroupedTabs.filter((tabRecord) => tabRecord.suspended).length +
+      windowRecord.groups.reduce(
+        (groupCount, groupRecord) => groupCount + groupRecord.tabs.filter((tabRecord) => tabRecord.suspended).length,
+        0
+      ),
+    0
+  );
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -91,9 +146,34 @@ export function App() {
     }
   }
 
-  async function refreshSavedGroups() {
-    const nextSavedGroups = (await browser.runtime.sendMessage({ type: "GET_SAVED_GROUPS" })) as SavedGroupRecord[];
-    setSavedGroups(nextSavedGroups);
+  useEffect(() => {
+    if (pendingGlobalAction === "suspend" && suspendableTabCount === 0) {
+      setPendingGlobalAction(null);
+    }
+
+    if (pendingGlobalAction === "restore" && restorableTabCount === 0) {
+      setPendingGlobalAction(null);
+    }
+  }, [pendingGlobalAction, restorableTabCount, suspendableTabCount]);
+
+  async function handleSuspendAll() {
+    setPendingGlobalAction("suspend");
+
+    try {
+      await browser.runtime.sendMessage({ type: "SUSPEND_ALL" });
+    } finally {
+      setPendingGlobalAction((current) => (current === "suspend" ? null : current));
+    }
+  }
+
+  async function handleRestoreAll() {
+    setPendingGlobalAction("restore");
+
+    try {
+      await browser.runtime.sendMessage({ type: "RESTORE_ALL" });
+    } finally {
+      setPendingGlobalAction((current) => (current === "restore" ? null : current));
+    }
   }
 
   return (
@@ -106,9 +186,29 @@ export function App() {
             <h1>Browser Overview</h1>
           </div>
         </div>
-        <button className="refresh-button" type="button" onClick={handleRefresh} disabled={refreshing}>
-          {refreshing ? "Refreshing..." : "Refresh"}
-        </button>
+        <div className="app-header-actions">
+          <button
+            className="header-action"
+            type="button"
+            onClick={handleRestoreAll}
+            disabled={pendingGlobalAction !== null || restorableTabCount === 0}
+            data-pending={pendingGlobalAction === "restore" ? "true" : "false"}
+          >
+            {pendingGlobalAction === "restore" ? "Restoring..." : "Restore All"}
+          </button>
+          <button
+            className="header-action"
+            type="button"
+            onClick={handleSuspendAll}
+            disabled={pendingGlobalAction !== null || suspendableTabCount === 0}
+            data-pending={pendingGlobalAction === "suspend" ? "true" : "false"}
+          >
+            {pendingGlobalAction === "suspend" ? "Suspending..." : "Suspend All"}
+          </button>
+          <button className="refresh-button" type="button" onClick={handleRefresh} disabled={refreshing}>
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
       </header>
 
       <section className="summary-grid">

@@ -29,21 +29,30 @@ body {
 }
 
 #root {
-  width: min(720px, 100%);
+  width: 100%;
+  min-height: 100vh;
+}
+
+.suspended-page {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -10px;
+  }
 }
 
 .suspended-shell {
+  width: min(720px, calc(100% - 48px));
   padding: 28px;
   border-radius: 28px;
   border: 1px solid var(--border);
   background: var(--surface);
   box-shadow: 0 24px 56px rgba(0, 0, 0, 0.28);
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 4px;
-  }
 }
 
 .eyebrow {

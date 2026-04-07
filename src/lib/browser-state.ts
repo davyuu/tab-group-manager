@@ -93,8 +93,14 @@ export type BrowserStateMessage =
       groupId: number;
     }
   | {
+      type: "SUSPEND_ALL";
+    }
+  | {
       type: "RESTORE_GROUP";
       groupId: number;
+    }
+  | {
+      type: "RESTORE_ALL";
     }
   | {
       type: "RESTORE_TAB";
@@ -118,5 +124,3 @@ export type BrowserStateMessage =
 
 export const UI_PORT_NAME = "tab-group-manager-ui";
 export const SUSPENDED_ROUTE = "suspended.html";
-export const SUSPENDED_STORAGE_KEY = "suspendedTabsById";
-export const SAVED_GROUPS_STORAGE_KEY = "savedGroups";

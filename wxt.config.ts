@@ -2,6 +2,9 @@ import { defineConfig } from "wxt";
 
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
+  webExt: {
+    disabled: true
+  },
   manifest: {
     name: "Tab Group Manager",
     description: "View all browser windows, tab groups, and tabs from a side panel.",
