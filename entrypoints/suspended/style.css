@@ -36,6 +36,12 @@ body {
   border: 1px solid var(--border);
   background: var(--surface);
   box-shadow: 0 24px 56px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+}
+
+.suspended-shell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .eyebrow {

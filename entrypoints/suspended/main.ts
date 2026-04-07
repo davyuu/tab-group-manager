@@ -6,11 +6,12 @@ const params = new URLSearchParams(window.location.search);
 const title = params.get("title") || "Suspended Tab";
 const originalUrl = params.get("url") || "";
 const capturedAt = Number(params.get("capturedAt"));
+let restoring = false;
 
 document.title = title;
 
 root.innerHTML = `
-  <main class="suspended-shell">
+  <main class="suspended-shell" role="button" tabindex="0" aria-label="Restore original page">
     <p class="eyebrow">Tab Group Manager</p>
     <h1>${escapeHtml(title)}</h1>
     <p class="page-url">${escapeHtml(originalUrl)}</p>
@@ -19,12 +20,13 @@ root.innerHTML = `
         ? `Suspended ${new Date(capturedAt).toLocaleString()}`
         : "Suspended recently"
     }</p>
-    <p class="restore-hint">Refresh this tab to restore the original page, or use the button below.</p>
+    <p class="restore-hint">Refresh this tab or click anywhere on this page to load the original page.</p>
     <button id="restoreButton" class="restore-button" type="button">Load Original Page</button>
   </main>
 `;
 
 document.getElementById("restoreButton")?.addEventListener("click", handleRestore);
+document.addEventListener("click", handleRestore);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
@@ -37,11 +39,17 @@ if (wasLoadedByManualRefresh()) {
 }
 
 async function handleRestore() {
+  if (restoring) {
+    return;
+  }
+
   const currentTab = await browser.tabs.getCurrent();
 
   if (!currentTab?.id) {
     return;
   }
+
+  restoring = true;
 
   const button = document.getElementById("restoreButton") as HTMLButtonElement | null;
   if (button) {
@@ -55,6 +63,7 @@ async function handleRestore() {
       tabId: currentTab.id
     });
   } catch (error) {
+    restoring = false;
     if (button) {
       button.disabled = false;
       button.textContent = `Restore failed`;

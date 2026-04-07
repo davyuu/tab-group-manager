@@ -4,6 +4,8 @@ import { EMPTY_BROWSER_STATE, type BrowserState, type GroupRecord, type TabRecor
 import { formatUrl } from "../../src/lib/format-url";
 import { BrandMark } from "./BrandMark";
 
+const FALLBACK_FAVICON = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+
 export function App() {
   const [browserState, setBrowserState] = useState<BrowserState>(EMPTY_BROWSER_STATE);
   const [statusText, setStatusText] = useState("Loading browser state...");
@@ -245,6 +247,7 @@ function GroupCard({ groupRecord }: { groupRecord: GroupRecord }) {
 function TabRow({ tabRecord }: { tabRecord: TabRecord }) {
   const flags = buildFlags(tabRecord);
   const [pending, setPending] = useState(false);
+  const faviconUrl = getRenderableFaviconUrl(tabRecord.favIconUrl);
 
   async function handleAction() {
     setPending(true);
@@ -264,7 +267,7 @@ function TabRow({ tabRecord }: { tabRecord: TabRecord }) {
       <img
         className="tab-favicon"
         alt=""
-        src={tabRecord.favIconUrl || "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="}
+        src={faviconUrl}
       />
       <div className="tab-copy">
         <p className="tab-title">{tabRecord.title}</p>
@@ -310,4 +313,21 @@ function buildFlags(tabRecord: TabRecord) {
   }
 
   return flags;
+}
+
+function getRenderableFaviconUrl(favIconUrl: string) {
+  if (!favIconUrl) {
+    return FALLBACK_FAVICON;
+  }
+
+  if (
+    favIconUrl.startsWith("chrome-extension://") ||
+    favIconUrl.startsWith("chrome://") ||
+    favIconUrl.startsWith("edge://") ||
+    favIconUrl.startsWith("about:")
+  ) {
+    return FALLBACK_FAVICON;
+  }
+
+  return favIconUrl;
 }
