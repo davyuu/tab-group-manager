@@ -104,10 +104,19 @@ Current primary structure:
 - `entrypoints/sidepanel/index.html`
 - `entrypoints/sidepanel/main.tsx`
 - `entrypoints/sidepanel/App.tsx`
-- `entrypoints/sidepanel/style.css`
+- `entrypoints/sidepanel/style.scss`
+- `entrypoints/suspended/main.tsx`
+- `entrypoints/suspended/style.scss`
 - `src/lib/browser-state.ts`
 - `src/lib/normalize-browser-state.ts`
 - `src/lib/format-url.ts`
+
+## UI Implementation Rules
+
+- Prefer React/TSX for extension UI surfaces.
+- Do not build page UI with `innerHTML` string injection.
+- Do not add custom `escapeHtml` rendering paths for extension pages when React rendering can be used instead.
+- Keep DOM event wiring declarative through React when practical.
 
 ## Agreed Milestones
 

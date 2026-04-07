@@ -1,0 +1,39 @@
+$brand-font: "Avenir Next", "Segoe UI", sans-serif;
+$group-colors: (
+  "grey": #9aa0a6,
+  "blue": #4c8bf5,
+  "red": #d85b52,
+  "yellow": #d4a728,
+  "green": #3c9b5f,
+  "pink": #d16bb2,
+  "purple": #8a68d4,
+  "cyan": #33a9c9,
+  "orange": #d98336
+);
+
+@mixin frosted-card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
+}
+
+@mixin button-reset {
+  border: 0;
+  font: inherit;
+  color: inherit;
+}
+
+@mixin ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin group-color-swatches {
+  @each $name, $color in $group-colors {
+    &.#{$name} {
+      background: $color;
+    }
+  }
+}

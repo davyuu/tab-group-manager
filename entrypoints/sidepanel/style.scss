@@ -1,3 +1,5 @@
+@use "../../src/styles/theme";
+
 :root {
   color-scheme: light dark;
   --bg: #f3efe7;
@@ -32,7 +34,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-family: theme.$brand-font;
   background:
     radial-gradient(circle at top, rgba(31, 111, 95, 0.18), transparent 28%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent),
@@ -56,6 +58,12 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+
+  h1 {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.05;
+  }
 }
 
 .brand-block {
@@ -82,12 +90,6 @@ body {
   color: var(--muted);
 }
 
-.app-header h1 {
-  margin: 0;
-  font-size: 24px;
-  line-height: 1.05;
-}
-
 .refresh-button {
   border: 1px solid var(--border);
   background: var(--surface-strong);
@@ -97,11 +99,11 @@ body {
   font: inherit;
   cursor: pointer;
   box-shadow: var(--shadow);
-}
 
-.refresh-button:disabled {
-  cursor: wait;
-  opacity: 0.8;
+  &:disabled {
+    cursor: wait;
+    opacity: 0.8;
+  }
 }
 
 .summary-grid {
@@ -115,15 +117,16 @@ body {
 .group-card,
 .saved-group-card,
 .status-row {
-  border: 1px solid var(--border);
-  background: var(--surface);
-  backdrop-filter: blur(14px);
-  box-shadow: var(--shadow);
+  @include theme.frosted-card;
 }
 
 .summary-card {
   border-radius: 18px;
   padding: 14px;
+
+  strong {
+    font-size: 24px;
+  }
 }
 
 .summary-label {
@@ -131,10 +134,6 @@ body {
   font-size: 12px;
   color: var(--muted);
   margin-bottom: 6px;
-}
-
-.summary-card strong {
-  font-size: 24px;
 }
 
 .status-row {
@@ -156,44 +155,53 @@ body {
 }
 
 .view-switcher-button {
-  border: 0;
+  @include theme.button-reset;
   border-radius: 14px;
   padding: 10px 12px;
   background: transparent;
   color: var(--muted);
-  font: inherit;
   font-weight: 700;
   cursor: pointer;
+
+  &[data-active="true"] {
+    background: var(--surface-strong);
+    color: var(--text);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+  }
 }
 
-.view-switcher-button[data-active="true"] {
-  background: var(--surface-strong);
-  color: var(--text);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
-}
-
-.window-list {
+.window-list,
+.saved-groups-list,
+.group-list,
+.tab-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
+.window-list,
 .saved-groups-list {
-  display: flex;
-  flex-direction: column;
   gap: 14px;
 }
 
-.window-card {
+.window-card,
+.saved-group-card {
   border-radius: 20px;
   padding: 14px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 38%),
     var(--surface-strong);
+}
+
+.window-card {
   border-color: rgba(31, 111, 95, 0.22);
   box-shadow:
     0 18px 34px rgba(0, 0, 0, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.saved-group-card {
+  border-color: rgba(31, 111, 95, 0.18);
 }
 
 .window-header,
@@ -211,15 +219,14 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.group-header {
-  padding-bottom: 6px;
+.group-header,
+.saved-group-header {
   align-items: flex-start;
   flex-wrap: wrap;
 }
 
-.saved-group-header {
-  align-items: flex-start;
-  flex-wrap: wrap;
+.group-header {
+  padding-bottom: 6px;
 }
 
 .window-title,
@@ -242,17 +249,21 @@ body {
   font-size: 13px;
 }
 
-.window-badge {
+.window-badge,
+.flag {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 74px;
   border-radius: 999px;
-  padding: 8px 10px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 12px;
   font-weight: 700;
+}
+
+.window-badge {
+  min-width: 74px;
+  padding: 8px 10px;
+  font-size: 12px;
 }
 
 .group-action,
@@ -266,6 +277,19 @@ body {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.75;
+  }
+
+  &[data-pending="true"] {
+    cursor: wait;
+  }
 }
 
 .group-action {
@@ -284,12 +308,6 @@ body {
 
 .group-list,
 .tab-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.group-list {
   margin-top: 12px;
 }
 
@@ -301,15 +319,6 @@ body {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 8px 18px rgba(0, 0, 0, 0.12);
-}
-
-.saved-group-card {
-  border-radius: 20px;
-  padding: 14px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 38%),
-    var(--surface-strong);
-  border-color: rgba(31, 111, 95, 0.18);
 }
 
 .group-title-row {
@@ -325,31 +334,19 @@ body {
   height: 12px;
   border-radius: 999px;
   flex: 0 0 auto;
-}
 
-.group-color.grey { background: #9aa0a6; }
-.group-color.blue { background: #4c8bf5; }
-.group-color.red { background: #d85b52; }
-.group-color.yellow { background: #d4a728; }
-.group-color.green { background: #3c9b5f; }
-.group-color.pink { background: #d16bb2; }
-.group-color.purple { background: #8a68d4; }
-.group-color.cyan { background: #33a9c9; }
-.group-color.orange { background: #d98336; }
-
-.tab-list {
-  margin-top: 12px;
+  @include theme.group-color-swatches;
 }
 
 .tab-row {
   align-items: flex-start;
   padding: 10px 2px;
   border-top: 1px solid var(--border);
-}
 
-.tab-row:first-child {
-  border-top: 0;
-  padding-top: 0;
+  &:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
 }
 
 .tab-favicon {
@@ -367,9 +364,7 @@ body {
 
 .tab-title,
 .tab-url {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  @include theme.ellipsis;
 }
 
 .tab-title {
@@ -397,42 +392,20 @@ body {
 }
 
 .flag {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
   padding: 4px 8px;
   font-size: 11px;
-  font-weight: 700;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.group-action:hover,
-.tab-action:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.group-action:disabled,
-.tab-action:disabled {
-  cursor: default;
-  opacity: 0.75;
-}
-
-.group-action[data-pending="true"],
-.tab-action[data-pending="true"] {
-  cursor: wait;
 }
 
 .ungrouped-block {
   margin-top: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: 14px;
-}
 
-.ungrouped-block h3 {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text);
+  h3 {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text);
+  }
 }
 
 .empty-state {
