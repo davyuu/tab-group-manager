@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { EMPTY_BROWSER_STATE, type BrowserState, type GroupRecord, type TabRecord, type WindowRecord, UI_PORT_NAME } from "../../src/lib/browser-state";
+import {
+  EMPTY_BROWSER_STATE,
+  type BrowserState,
+  type GroupRecord,
+  type SavedGroupRecord,
+  type TabRecord,
+  type WindowRecord,
+  UI_PORT_NAME
+} from "../../src/lib/browser-state";
 import { formatUrl } from "../../src/lib/format-url";
 import { BrandMark } from "./BrandMark";
 
@@ -8,8 +16,10 @@ const FALLBACK_FAVICON = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAA
 
 export function App() {
   const [browserState, setBrowserState] = useState<BrowserState>(EMPTY_BROWSER_STATE);
+  const [savedGroups, setSavedGroups] = useState<SavedGroupRecord[]>([]);
   const [statusText, setStatusText] = useState("Loading browser state...");
   const [refreshing, setRefreshing] = useState(false);
+  const [activeView, setActiveView] = useState<"live" | "saved">("live");
 
   useEffect(() => {
     let reconnectTimeout: number | undefined;
@@ -46,6 +56,7 @@ export function App() {
     void browser.runtime.sendMessage({ type: "GET_BROWSER_STATE" }).then((state) => {
       applyBrowserState(state as BrowserState);
     });
+    void refreshSavedGroups();
 
     return () => {
       if (reconnectTimeout) {
@@ -80,6 +91,11 @@ export function App() {
     }
   }
 
+  async function refreshSavedGroups() {
+    const nextSavedGroups = (await browser.runtime.sendMessage({ type: "GET_SAVED_GROUPS" })) as SavedGroupRecord[];
+    setSavedGroups(nextSavedGroups);
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -105,15 +121,34 @@ export function App() {
         <span>{statusText}</span>
       </section>
 
-      <section className="window-list" aria-live="polite">
-        {browserState.windows.length === 0 ? (
-          <div className="empty-state">No browser windows found.</div>
-        ) : (
-          browserState.windows.map((windowRecord, index) => (
-            <WindowCard key={windowRecord.id} index={index} windowRecord={windowRecord} />
-          ))
-        )}
+      <section className="view-switcher" aria-label="Panel view">
+        <button className="view-switcher-button" data-active={activeView === "live"} type="button" onClick={() => setActiveView("live")}>
+          Live
+        </button>
+        <button className="view-switcher-button" data-active={activeView === "saved"} type="button" onClick={() => setActiveView("saved")}>
+          Saved
+        </button>
       </section>
+
+      {activeView === "live" ? (
+        <section className="window-list" aria-live="polite">
+          {browserState.windows.length === 0 ? (
+            <div className="empty-state">No browser windows found.</div>
+          ) : (
+            browserState.windows.map((windowRecord, index) => (
+              <WindowCard
+                key={windowRecord.id}
+                index={index}
+                windowRecord={windowRecord}
+                savedGroups={savedGroups}
+                onSavedGroupsChanged={refreshSavedGroups}
+              />
+            ))
+          )}
+        </section>
+      ) : (
+        <SavedGroupsView savedGroups={savedGroups} onSavedGroupsChanged={refreshSavedGroups} />
+      )}
     </main>
   );
 }
@@ -127,7 +162,17 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function WindowCard({ index, windowRecord }: { index: number; windowRecord: WindowRecord }) {
+function WindowCard({
+  index,
+  windowRecord,
+  savedGroups,
+  onSavedGroupsChanged
+}: {
+  index: number;
+  windowRecord: WindowRecord;
+  savedGroups: SavedGroupRecord[];
+  onSavedGroupsChanged: () => Promise<void>;
+}) {
   return (
     <article className="window-card">
       <header className="window-header">
@@ -142,7 +187,12 @@ function WindowCard({ index, windowRecord }: { index: number; windowRecord: Wind
 
       <div className="group-list">
         {windowRecord.groups.map((groupRecord) => (
-          <GroupCard key={groupRecord.id} groupRecord={groupRecord} />
+          <GroupCard
+            key={groupRecord.id}
+            groupRecord={groupRecord}
+            savedGroups={savedGroups}
+            onSavedGroupsChanged={onSavedGroupsChanged}
+          />
         ))}
       </div>
 
@@ -160,10 +210,21 @@ function WindowCard({ index, windowRecord }: { index: number; windowRecord: Wind
   );
 }
 
-function GroupCard({ groupRecord }: { groupRecord: GroupRecord }) {
-  const [pendingAction, setPendingAction] = useState<"suspend" | "restore" | null>(null);
+function GroupCard({
+  groupRecord,
+  savedGroups,
+  onSavedGroupsChanged
+}: {
+  groupRecord: GroupRecord;
+  savedGroups: SavedGroupRecord[];
+  onSavedGroupsChanged: () => Promise<void>;
+}) {
+  const [pendingAction, setPendingAction] = useState<"suspend" | "restore" | "save" | null>(null);
   const suspendableCount = groupRecord.tabs.filter((tabRecord) => !tabRecord.suspended).length;
   const restorableCount = groupRecord.tabs.filter((tabRecord) => tabRecord.suspended).length;
+  const matchingSavedGroup = savedGroups.find((savedGroup) => savedGroup.title === groupRecord.title);
+  const shouldHideSaveGroup = matchingSavedGroup ? doGroupTabsMatch(groupRecord, matchingSavedGroup) : false;
+  const saveGroupLabel = matchingSavedGroup ? "Update Group" : "Save Group";
 
   useEffect(() => {
     if (pendingAction === "suspend" && suspendableCount === 0) {
@@ -201,6 +262,20 @@ function GroupCard({ groupRecord }: { groupRecord: GroupRecord }) {
     }
   }
 
+  async function handleSaveGroup() {
+    setPendingAction("save");
+
+    try {
+      await browser.runtime.sendMessage({
+        type: "SAVE_GROUP",
+        groupId: groupRecord.id
+      });
+      await onSavedGroupsChanged();
+    } finally {
+      setPendingAction((current) => (current === "save" ? null : current));
+    }
+  }
+
   return (
     <section className="group-card">
       <header className="group-header">
@@ -214,6 +289,17 @@ function GroupCard({ groupRecord }: { groupRecord: GroupRecord }) {
           </div>
         </div>
         <div className="group-actions">
+          {shouldHideSaveGroup ? null : (
+            <button
+              className="group-action"
+              type="button"
+              onClick={handleSaveGroup}
+              disabled={pendingAction !== null}
+              data-pending={pendingAction === "save" ? "true" : "false"}
+            >
+              {pendingAction === "save" ? `${saveGroupLabel === "Update Group" ? "Updating..." : "Saving..."}` : saveGroupLabel}
+            </button>
+          )}
           <button
             className="group-action"
             type="button"
@@ -315,6 +401,116 @@ function buildFlags(tabRecord: TabRecord) {
   return flags;
 }
 
+function SavedGroupsView({
+  savedGroups,
+  onSavedGroupsChanged
+}: {
+  savedGroups: SavedGroupRecord[];
+  onSavedGroupsChanged: () => Promise<void>;
+}) {
+  return (
+    <section className="saved-groups-list" aria-live="polite">
+      {savedGroups.length === 0 ? (
+        <div className="empty-state">No saved groups yet. Save a live group to reopen it later.</div>
+      ) : (
+        savedGroups.map((savedGroup) => (
+          <SavedGroupCard key={savedGroup.id} savedGroup={savedGroup} onSavedGroupsChanged={onSavedGroupsChanged} />
+        ))
+      )}
+    </section>
+  );
+}
+
+function SavedGroupCard({
+  savedGroup,
+  onSavedGroupsChanged
+}: {
+  savedGroup: SavedGroupRecord;
+  onSavedGroupsChanged: () => Promise<void>;
+}) {
+  const [pendingAction, setPendingAction] = useState<"open" | "delete" | null>(null);
+
+  async function handleOpenGroup() {
+    setPendingAction("open");
+
+    try {
+      await browser.runtime.sendMessage({
+        type: "OPEN_SAVED_GROUP",
+        savedGroupId: savedGroup.id
+      });
+    } finally {
+      setPendingAction((current) => (current === "open" ? null : current));
+    }
+  }
+
+  async function handleDeleteGroup() {
+    setPendingAction("delete");
+
+    try {
+      await browser.runtime.sendMessage({
+        type: "DELETE_SAVED_GROUP",
+        savedGroupId: savedGroup.id
+      });
+      await onSavedGroupsChanged();
+    } finally {
+      setPendingAction((current) => (current === "delete" ? null : current));
+    }
+  }
+
+  return (
+    <article className="saved-group-card">
+      <header className="saved-group-header">
+        <div className="group-title-row">
+          <span className={`group-color ${savedGroup.color}`} />
+          <div>
+            <h3 className="group-title">{savedGroup.title}</h3>
+            <p className="group-meta">
+              {savedGroup.tabCount} tabs • saved {new Date(savedGroup.savedAt).toLocaleString()}
+            </p>
+          </div>
+        </div>
+        <div className="group-actions">
+          <button
+            className="group-action"
+            type="button"
+            onClick={handleOpenGroup}
+            disabled={pendingAction !== null}
+            data-pending={pendingAction === "open" ? "true" : "false"}
+          >
+            {pendingAction === "open" ? "Opening..." : "Open Group"}
+          </button>
+          <button
+            className="group-action"
+            type="button"
+            onClick={handleDeleteGroup}
+            disabled={pendingAction !== null}
+            data-pending={pendingAction === "delete" ? "true" : "false"}
+          >
+            {pendingAction === "delete" ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </header>
+
+      <div className="tab-list">
+        {savedGroup.tabs.map((savedTab, index) => (
+          <article className="tab-row" key={`${savedGroup.id}-${index}`}>
+            <img className="tab-favicon" alt="" src={getRenderableFaviconUrl(savedTab.favIconUrl)} />
+            <div className="tab-copy">
+              <p className="tab-title">{savedTab.title}</p>
+              <p className="tab-url">{formatUrl(savedTab.url)}</p>
+            </div>
+            <div className="tab-controls">
+              <div className="tab-flags">
+                {savedTab.pinned ? <span className="flag">Pinned</span> : null}
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 function getRenderableFaviconUrl(favIconUrl: string) {
   if (!favIconUrl) {
     return FALLBACK_FAVICON;
@@ -330,4 +526,22 @@ function getRenderableFaviconUrl(favIconUrl: string) {
   }
 
   return favIconUrl;
+}
+
+function doGroupTabsMatch(groupRecord: GroupRecord, savedGroup: SavedGroupRecord) {
+  const liveTabs = groupRecord.tabs
+    .map((tabRecord) => ({
+      url: tabRecord.url,
+      pinned: tabRecord.pinned
+    }))
+    .filter((tabRecord) => tabRecord.url);
+
+  if (liveTabs.length !== savedGroup.tabs.length) {
+    return false;
+  }
+
+  return liveTabs.every((liveTab, index) => {
+    const savedTab = savedGroup.tabs[index];
+    return savedTab && savedTab.url === liveTab.url && savedTab.pinned === liveTab.pinned;
+  });
 }

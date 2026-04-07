@@ -1,9 +1,11 @@
 import {
   EMPTY_BROWSER_STATE,
+  SAVED_GROUPS_STORAGE_KEY,
   SUSPENDED_ROUTE,
   SUSPENDED_STORAGE_KEY,
   type BrowserState,
   type BrowserStateMessage,
+  type SavedGroupRecord,
   type SuspendedTabRecord,
   UI_PORT_NAME
 } from "../../src/lib/browser-state";
@@ -48,6 +50,13 @@ export default defineBackground({
         return;
       }
 
+      if (message?.type === "GET_SAVED_GROUPS") {
+        getSavedGroups()
+          .then((savedGroups) => sendResponse(savedGroups))
+          .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+      }
+
       if (message?.type === "REFRESH_BROWSER_STATE") {
         refreshBrowserState()
           .then(() => sendResponse({ ok: true }))
@@ -78,6 +87,27 @@ export default defineBackground({
 
       if (message?.type === "RESTORE_TAB") {
         restoreTab(message.tabId)
+          .then((result) => sendResponse({ ok: result }))
+          .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+      }
+
+      if (message?.type === "SAVE_GROUP") {
+        saveGroup(message.groupId)
+          .then((savedGroup) => sendResponse({ ok: true, savedGroup }))
+          .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+      }
+
+      if (message?.type === "OPEN_SAVED_GROUP") {
+        openSavedGroup(message.savedGroupId)
+          .then((result) => sendResponse({ ok: result }))
+          .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+      }
+
+      if (message?.type === "DELETE_SAVED_GROUP") {
+        deleteSavedGroup(message.savedGroupId)
           .then((result) => sendResponse({ ok: result }))
           .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
         return true;
@@ -255,6 +285,101 @@ export default defineBackground({
       return true;
     }
 
+    async function saveGroup(groupId: number) {
+      const [group, tabsInGroup, suspendedTabStore] = await Promise.all([
+        browser.tabGroups.get(groupId),
+        browser.tabs.query({ groupId }),
+        getSuspendedTabStore()
+      ]);
+
+      const savedTabs = tabsInGroup
+        .map((tab) => buildSavedGroupTab(tab, suspendedTabStore[String(tab.id ?? "")]))
+        .filter((tab): tab is NonNullable<typeof tab> => tab !== null);
+
+      if (savedTabs.length === 0) {
+        throw new Error("This group has no savable tabs.");
+      }
+
+      const savedGroup: SavedGroupRecord = {
+        id: crypto.randomUUID(),
+        title: group.title || "Untitled group",
+        color: group.color || "grey",
+        tabCount: savedTabs.length,
+        savedAt: Date.now(),
+        tabs: savedTabs
+      };
+
+      const savedGroups = await getSavedGroups();
+      const duplicateSavedGroups = savedGroups.filter((savedGroupRecord) => savedGroupRecord.title === savedGroup.title);
+      const existingSavedGroup = duplicateSavedGroups[0];
+      const nextSavedGroup = existingSavedGroup
+        ? {
+            ...savedGroup,
+            id: existingSavedGroup.id
+          }
+        : savedGroup;
+
+      const nextSavedGroups = [
+        nextSavedGroup,
+        ...savedGroups.filter((savedGroupRecord) => savedGroupRecord.title !== savedGroup.title)
+      ];
+
+      await browser.storage.local.set({ [SAVED_GROUPS_STORAGE_KEY]: nextSavedGroups.slice(0, 50) });
+
+      return nextSavedGroup;
+    }
+
+    async function openSavedGroup(savedGroupId: string) {
+      const savedGroups = await getSavedGroups();
+      const savedGroup = savedGroups.find((group) => group.id === savedGroupId);
+
+      if (!savedGroup || savedGroup.tabs.length === 0) {
+        return false;
+      }
+
+      const currentWindow = await browser.windows.getCurrent();
+      const createdTabs: chrome.tabs.Tab[] = [];
+
+      for (const [index, savedTab] of savedGroup.tabs.entries()) {
+        const createdTab = await browser.tabs.create({
+          windowId: currentWindow.id,
+          url: savedTab.url,
+          pinned: savedTab.pinned,
+          active: index === 0
+        });
+
+        createdTabs.push(createdTab);
+      }
+
+      const tabIds = createdTabs
+        .map((tab) => tab.id)
+        .filter((tabId): tabId is number => typeof tabId === "number");
+
+      if (tabIds.length > 0) {
+        const groupTabIds = [tabIds[0], ...tabIds.slice(1)] as [number, ...number[]];
+        const restoredGroupId = await browser.tabs.group({ tabIds: groupTabIds });
+        await browser.tabGroups.update(restoredGroupId, {
+          title: savedGroup.title,
+          color: savedGroup.color as `${chrome.tabGroups.Color}`
+        });
+      }
+
+      await refreshBrowserState();
+      return true;
+    }
+
+    async function deleteSavedGroup(savedGroupId: string) {
+      const savedGroups = await getSavedGroups();
+      const nextSavedGroups = savedGroups.filter((group) => group.id !== savedGroupId);
+
+      if (nextSavedGroups.length === savedGroups.length) {
+        return false;
+      }
+
+      await browser.storage.local.set({ [SAVED_GROUPS_STORAGE_KEY]: nextSavedGroups });
+      return true;
+    }
+
     function canSuspendTab(tab: chrome.tabs.Tab) {
       if (!tab.id || !tab.url) {
         return false;
@@ -301,6 +426,11 @@ export default defineBackground({
       return (result[SUSPENDED_STORAGE_KEY] || {}) as Record<string, SuspendedTabRecord>;
     }
 
+    async function getSavedGroups() {
+      const result = await browser.storage.local.get(SAVED_GROUPS_STORAGE_KEY);
+      return (result[SAVED_GROUPS_STORAGE_KEY] || []) as SavedGroupRecord[];
+    }
+
     async function getSuspendedTabRecord(tabId: number) {
       const store = await getSuspendedTabStore();
       return store[String(tabId)] || null;
@@ -316,6 +446,20 @@ export default defineBackground({
       const store = await getSuspendedTabStore();
       delete store[String(tabId)];
       await browser.storage.local.set({ [SUSPENDED_STORAGE_KEY]: store });
+    }
+
+    function buildSavedGroupTab(tab: chrome.tabs.Tab, suspendedRecord?: SuspendedTabRecord) {
+      const sourceUrl = isSuspendedPage(tab.url) ? suspendedRecord?.originalUrl || "" : tab.url || "";
+      if (!sourceUrl || isInternalPage(sourceUrl)) {
+        return null;
+      }
+
+      return {
+        title: isSuspendedPage(tab.url) ? suspendedRecord?.originalTitle || tab.title || "Untitled tab" : tab.title || "Untitled tab",
+        url: sourceUrl,
+        favIconUrl: isSuspendedPage(tab.url) ? suspendedRecord?.originalFavIconUrl || "" : tab.favIconUrl || "",
+        pinned: Boolean(tab.pinned)
+      };
     }
   }
 });

@@ -14,6 +14,22 @@ export type SuspendedTabRecord = {
   capturedAt: number;
 };
 
+export type SavedGroupTabRecord = {
+  title: string;
+  url: string;
+  favIconUrl: string;
+  pinned: boolean;
+};
+
+export type SavedGroupRecord = {
+  id: string;
+  title: string;
+  color: string;
+  tabCount: number;
+  savedAt: number;
+  tabs: SavedGroupTabRecord[];
+};
+
 export type WindowRecord = {
   id: number;
   focused: boolean;
@@ -83,8 +99,24 @@ export type BrowserStateMessage =
   | {
       type: "RESTORE_TAB";
       tabId: number;
+    }
+  | {
+      type: "GET_SAVED_GROUPS";
+    }
+  | {
+      type: "SAVE_GROUP";
+      groupId: number;
+    }
+  | {
+      type: "OPEN_SAVED_GROUP";
+      savedGroupId: string;
+    }
+  | {
+      type: "DELETE_SAVED_GROUP";
+      savedGroupId: string;
     };
 
 export const UI_PORT_NAME = "tab-group-manager-ui";
 export const SUSPENDED_ROUTE = "suspended.html";
 export const SUSPENDED_STORAGE_KEY = "suspendedTabsById";
+export const SAVED_GROUPS_STORAGE_KEY = "savedGroups";
